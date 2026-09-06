@@ -1,4 +1,4 @@
-# mihomo-teyvat
+# arkhon-core
 
 **Teyvat-Arkhon 定制内核**，基于 [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) 的 fork。
 
@@ -45,15 +45,15 @@ hysteria2 握手 / 建连失败按原因分类提示：
 依赖：[Go 1.20 及以上](https://go.dev/dl/)
 
 ```shell
-git clone https://github.com/luoqingciya/mihomo-teyvat.git
-cd mihomo-teyvat && go mod download
-go build
+git clone https://github.com/luoqingciya/arkhon-core.git
+cd arkhon-core && go mod download
+go build -o arkhon
 ```
 
 使用 gvisor tun 栈构建：
 
 ```shell
-go build -tags with_gvisor
+go build -o arkhon -tags with_gvisor
 ```
 
 无法直连 GitHub 时设置 Go 代理：
@@ -67,7 +67,7 @@ go env -w GOPROXY=https://goproxy.io,direct
 推送 `v*` 形 tag 即触发 [.github/workflows/release-custom.yml](.github/workflows/release-custom.yml)，自动交叉编译并发布 GitHub Release：
 
 - 平台/架构：windows / linux / darwin × amd64 / arm64
-- 资产命名遵循 Teyvat-Arkhon 应用下载脚本约定（windows 为 `.zip` 内含 `mihomo-windows-<arch>.exe`，其余为 `.gz`）
+- 资产命名遵循 Teyvat-Arkhon 应用下载脚本约定（windows 为 `.zip` 内含 `arkhon-windows-<arch>.exe`，其余为 `.gz`）
 - release 附带 `checksums.txt`，应用侧据此做完整性校验
 
 ## 文档
