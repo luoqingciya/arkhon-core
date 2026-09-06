@@ -61,12 +61,13 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
+          # 注意：go build -o arkhon 对所有目标生成无扩展名文件（windows 不会自动加 .exe）
           go build -v -o arkhon -tags "with_gvisor" -trimpath \
             -ldflags "${BUILDTAG} -X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=${BUILDTIME}' -w -s -buildid="
 
           BINNAME="arkhon-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            cp arkhon.exe "${BINNAME}.exe"
+            cp arkhon "${BINNAME}.exe"
             zip -q "${BINNAME}-${VERSION}.zip" "${BINNAME}.exe"
           else
             gzip -c arkhon > "${BINNAME}-${VERSION}.gz"
