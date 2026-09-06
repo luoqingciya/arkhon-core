@@ -487,7 +487,7 @@ type Config struct {
 
 func (config Config) newCache() dnsCache {
 	if config.CacheMaxSize == 0 {
-		config.CacheMaxSize = 4096
+		config.CacheMaxSize = 8192 // [fork] 默认 DNS 缓存容量由上游 4096 调优为 8192，缓存命中率更高（每项 ≈ 一条 DNS 应答，内存开销可忽略）
 	}
 	switch config.CacheAlgorithm {
 	case "arc":

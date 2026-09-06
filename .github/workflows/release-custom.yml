@@ -1,0 +1,112 @@
+# 定制内核发布流水线（Teyvat-Arkhon fork 专用）
+#
+# 触发方式：
+#   - push 形如 v1.2.3 的 tag，自动交叉编译三平台 × amd64/arm64，并发布 GitHub Release
+#   - workflow_dispatch 手动触发（无 tag 时仅构建产物，不发布）
+#
+# 产物命名约定（与应用侧 scripts/download-core.mjs 严格对齐）：
+#   windows -> mihomo-windows-<arch>-<tag>.zip   内含 mihomo-windows-<arch>.exe
+#   linux   -> mihomo-linux-<arch>-<tag>.gz
+#   darwin  -> mihomo-darwin-<arch>-<tag>.gz
+# 应用侧通过 {OWNER}/{REPO}/releases/download/<tag>/<asset> 拉取，tag 需与应用配置一致。
+
+name: Release Custom Core
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CGO_ENABLED: '0'
+  BUILDTAG: '-extldflags -static'
+
+jobs:
+  build:
+    name: build ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: go.sum
+
+      - name: Resolve version
+        run: |
+          if [ -n "${GITHUB_REF_NAME}" ] && [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "BUILDTIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Build core
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -v -tags "with_gvisor" -trimpath \
+            -ldflags "${BUILDTAG} -X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=${BUILDTIME}' -w -s -buildid="
+
+          BINNAME="mihomo-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            cp mihomo.exe "${BINNAME}.exe"
+            zip -q "${BINNAME}-${VERSION}.zip" "${BINNAME}.exe"
+          else
+            gzip -c mihomo > "${BINNAME}-${VERSION}.gz"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: core-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            mihomo-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}.zip
+            mihomo-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    if: ${{ github.ref_type == 'tag' }}
+    needs: [build]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: bin/
+          merge-multiple: true
+
+      - name: Compute checksums
+        run: |
+          cd bin/
+          sha256sum mihomo-* > checksums.txt
+          cat checksums.txt
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/*
+          generate_release_notes: true
+          body: |
+            Teyvat-Arkhon 定制内核 (mihomo-teyvat) 发布。
+
+            资产命名遵循应用下载脚本约定，应用侧配置指向本仓库后即可自动拉取。
