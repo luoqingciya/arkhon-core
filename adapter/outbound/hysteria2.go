@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	N "github.com/metacubex/mihomo/common/net"
@@ -27,7 +28,15 @@ import (
 )
 
 const minHopInterval = 5
-const defaultHopInterval = 30
+const defaultHopInterval = 120 // [fork] 默认跳频间隔由上游 30s 调优为 120s：降低端口切换频率，减少握手重建与延迟抖动（用户仍可通过 hop-interval 覆盖）
+
+// quicWindowDefault 返回用户配置的窗口值；未配置（0）时使用 fork 调优默认值
+func quicWindowDefault(v, def uint64) uint64 {
+	if v == 0 {
+		return def
+	}
+	return v
+}
 
 type Hysteria2 struct {
 	*Base
@@ -92,7 +101,7 @@ type Hysteria2RealmOption struct {
 func (h *Hysteria2) DialContext(ctx context.Context, metadata *C.Metadata) (_ C.Conn, err error) {
 	c, err := h.client.DialConn(ctx, M.ParseSocksaddrHostPort(metadata.String(), metadata.DstPort))
 	if err != nil {
-		return nil, err
+		return nil, h.wrapConnError("建连", err)
 	}
 	return NewConn(c, h), nil
 }
@@ -103,12 +112,34 @@ func (h *Hysteria2) ListenPacketContext(ctx context.Context, metadata *C.Metadat
 	}
 	pc, err := h.client.ListenPacket(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hysteria2 UDP 会话建立失败（服务器可能禁用了 UDP）: %s: %w", h.option.Server, err)
 	}
 	if pc == nil {
 		return nil, errors.New("packetConn is nil")
 	}
 	return NewPacketConn(N.NewThreadSafePacketConn(pc), h), nil
+}
+
+// wrapConnError 将 hysteria2 握手/建连错误按原因分类包装为可读错误，便于应用层与用户排障。
+// 匹配不到已知类别时也会携带服务器地址，保证错误信息始终可定位。
+func (h *Hysteria2) wrapConnError(action string, err error) error {
+	server := h.option.Server
+	lower := strings.ToLower(err.Error())
+
+	switch {
+	case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+		strings.Contains(lower, "timeout") || strings.Contains(lower, "deadline"):
+		return fmt.Errorf("hysteria2 %s %s 超时: 服务器不可达，或 TLS/obfs 参数不匹配导致握手被服务端静默断开; 请检查服务器连通性与 sni/alpn/obfs 配置 (%w)", action, server, err)
+	case strings.Contains(lower, "x509") || strings.Contains(lower, "certificate") || strings.Contains(lower, "cert") ||
+		strings.Contains(lower, "tls: handshake"):
+		return fmt.Errorf("hysteria2 %s %s 失败: TLS 握手失败（证书校验/ALPN 不匹配/证书过期），可尝试 skip-cert-verify (%w)", action, server, err)
+	case strings.Contains(lower, "authenticate") || strings.Contains(lower, "auth"):
+		return fmt.Errorf("hysteria2 %s %s 失败: 服务器认证未通过，请检查 hysteria2 password (%w)", action, server, err)
+	case strings.Contains(lower, "obfs") || strings.Contains(lower, "salamander") || strings.Contains(lower, "gecko"):
+		return fmt.Errorf("hysteria2 %s %s 失败: obfs 参数不匹配（obfs/obfs-password 须与服务器一致）(%w)", action, server, err)
+	default:
+		return fmt.Errorf("hysteria2 %s %s 失败: %w", action, server, err)
+	}
 }
 
 // Close implements C.ProxyAdapter
@@ -198,11 +229,13 @@ func NewHysteria2(option Hysteria2Option) (*Hysteria2, error) {
 		option.UdpMTU = 1200 - 3
 	}
 
+	// [fork] QUIC 流控窗口默认值调优：用户未显式配置（0）时注入 Meta 官方推荐值，
+	// 提升大带宽场景下的下行吞吐；显式配置时保持用户覆盖
 	quicConfig := &quic.Config{
-		InitialStreamReceiveWindow:     option.InitialStreamReceiveWindow,
-		MaxStreamReceiveWindow:         option.MaxStreamReceiveWindow,
-		InitialConnectionReceiveWindow: option.InitialConnectionReceiveWindow,
-		MaxConnectionReceiveWindow:     option.MaxConnectionReceiveWindow,
+		InitialStreamReceiveWindow:     quicWindowDefault(option.InitialStreamReceiveWindow, 8<<20),
+		MaxStreamReceiveWindow:         quicWindowDefault(option.MaxStreamReceiveWindow, 8<<20),
+		InitialConnectionReceiveWindow: quicWindowDefault(option.InitialConnectionReceiveWindow, 16<<20),
+		MaxConnectionReceiveWindow:     quicWindowDefault(option.MaxConnectionReceiveWindow, 16<<20),
 	}
 
 	clientOptions := hysteria2.ClientOptions{
