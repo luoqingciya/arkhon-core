@@ -5,9 +5,9 @@
 #   - workflow_dispatch 手动触发（无 tag 时仅构建产物，不发布）
 #
 # 产物命名约定（与应用侧 scripts/download-core.mjs 严格对齐）：
-#   windows -> mihomo-windows-<arch>-<tag>.zip   内含 mihomo-windows-<arch>.exe
-#   linux   -> mihomo-linux-<arch>-<tag>.gz
-#   darwin  -> mihomo-darwin-<arch>-<tag>.gz
+#   windows -> arkhon-windows-<arch>-<tag>.zip   内含 arkhon-windows-<arch>.exe
+#   linux   -> arkhon-linux-<arch>-<tag>.gz
+#   darwin  -> arkhon-darwin-<arch>-<tag>.gz
 # 应用侧通过 {OWNER}/{REPO}/releases/download/<tag>/<asset> 拉取，tag 需与应用配置一致。
 
 name: Release Custom Core
@@ -61,15 +61,15 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          go build -v -tags "with_gvisor" -trimpath \
+          go build -v -o arkhon -tags "with_gvisor" -trimpath \
             -ldflags "${BUILDTAG} -X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=${BUILDTIME}' -w -s -buildid="
 
-          BINNAME="mihomo-${{ matrix.goos }}-${{ matrix.goarch }}"
+          BINNAME="arkhon-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            cp mihomo.exe "${BINNAME}.exe"
+            cp arkhon.exe "${BINNAME}.exe"
             zip -q "${BINNAME}-${VERSION}.zip" "${BINNAME}.exe"
           else
-            gzip -c mihomo > "${BINNAME}-${VERSION}.gz"
+            gzip -c arkhon > "${BINNAME}-${VERSION}.gz"
           fi
 
       - name: Upload artifact
@@ -77,8 +77,8 @@ jobs:
         with:
           name: core-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            mihomo-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}.zip
-            mihomo-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}.gz
+            arkhon-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}.zip
+            arkhon-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}.gz
           if-no-files-found: error
 
   release:
@@ -98,7 +98,7 @@ jobs:
       - name: Compute checksums
         run: |
           cd bin/
-          sha256sum mihomo-* > checksums.txt
+          sha256sum arkhon-* > checksums.txt
           cat checksums.txt
 
       - name: Publish Release
@@ -107,6 +107,6 @@ jobs:
           files: bin/*
           generate_release_notes: true
           body: |
-            Teyvat-Arkhon 定制内核 (mihomo-teyvat) 发布。
+            Teyvat-Arkhon 定制内核 (arkhon-core) 发布。
 
             资产命名遵循应用下载脚本约定，应用侧配置指向本仓库后即可自动拉取。
