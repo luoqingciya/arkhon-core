@@ -1,9 +1,9 @@
 <h1 align="center">
-  <img src="Meta.png" alt="Meta Kennel" width="200">
+  <img src="Meta.png" alt="Meta Kernel" width="200">
   <br>Meta Kernel<br>
 </h1>
 
-<h3 align="center">Another Mihomo Kernel.</h3>
+<h3 align="center">Teyvat-Arkhon 定制内核（上游 MetaCubeX/mihomo fork）</h3>
 
 <p align="center">
   <a href="https://goreportcard.com/report/github.com/MetaCubeX/mihomo">
@@ -17,6 +17,23 @@
     <img src="https://img.shields.io/badge/release-Meta-00b4f0?style=flat-square">
   </a>
 </p>
+
+## 定制说明（第一梯队）
+
+本仓库是 [Teyvat-Arkhon](https://github.com/luoqingciya/Teyvat-Arkhon) 的定制内核，基于上游 MetaCubeX/mihomo。在不破坏上游 API 的前提下，做了以下增量定制（均在 `feat/custom-kernel` → `main` 分支）：
+
+- **只读 REST 扩展**（纯新增端点，不修改上游行为）
+  - `GET /usage`：按节点聚合的流量统计（当前活跃连接），随全局 `upTotal/downTotal`
+  - `GET /delay/latest`：全部节点最近一次延迟测试的快照（读取缓存，不触发测速）
+- **错误日志可读化**
+  - hysteria2 握手/建连失败按原因分类提示：TLS 握手（证书/ALPN/skip-cert-verify）、认证（password）、obfs（salamander 参数不匹配）、超时（服务器不可达或参数不匹配导致静默断开）
+  - UDP 会话建立失败明确提示"服务器可能禁用了 UDP"
+- **默认配置调优**（内部兜底默认值，不改任何配置字段）
+  - hysteria2 默认 `hop-interval` 由上游 30s 调优为 120s，减少端口切换与延迟抖动
+  - 未配置 QUIC 流控窗口时注入推荐值（stream 8MB / connection 16MB），提升大带宽下行吞吐
+  - DNS 缓存默认容量由 4096 调优为 8192
+
+> 这些定制点不影响上游配置格式与 API 兼容性，仅作为 Teyvat-Arkhon 应用侧排障与性能体验优化的一环。
 
 ## Features
 
