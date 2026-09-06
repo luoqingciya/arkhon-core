@@ -1,80 +1,53 @@
-<h1 align="center">
-  <img src="Meta.png" alt="Meta Kernel" width="200">
-  <br>Meta Kernel<br>
-</h1>
+# mihomo-teyvat
 
-<h3 align="center">Teyvat-Arkhon 定制内核（上游 MetaCubeX/mihomo fork）</h3>
+**Teyvat-Arkhon 定制内核**，基于 [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) 的 fork。
 
-<p align="center">
-  <a href="https://goreportcard.com/report/github.com/MetaCubeX/mihomo">
-    <img src="https://goreportcard.com/badge/github.com/MetaCubeX/mihomo?style=flat-square">
-  </a>
-  <img src="https://img.shields.io/github/go-mod/go-version/MetaCubeX/mihomo/Alpha?style=flat-square">
-  <a href="https://github.com/MetaCubeX/mihomo/releases">
-    <img src="https://img.shields.io/github/release/MetaCubeX/mihomo/all.svg?style=flat-square">
-  </a>
-  <a href="https://github.com/MetaCubeX/mihomo">
-    <img src="https://img.shields.io/badge/release-Meta-00b4f0?style=flat-square">
-  </a>
-</p>
+仅做"不改上游配置与 API 兼容性"的增量定制，作为 [Teyvat-Arkhon](https://github.com/luoqingciya/Teyvat-Arkhon) 桌面客户端的代理内核使用。
 
-## 定制说明（第一梯队）
+## 策略
 
-本仓库是 [Teyvat-Arkhon](https://github.com/luoqingciya/Teyvat-Arkhon) 的定制内核，基于上游 MetaCubeX/mihomo。在不破坏上游配置格式与 API 兼容性的前提下，做了以下增量定制（均在 `feat/custom-kernel` → `main` 分支）：
+- 保持与上游 mihomo 同步，配置格式与 REST API 完全兼容
+- 定制点聚焦：**可排障性**与**默认开箱体验**，不改变协议语义
+- 所有定制均有明确出处标注，便于随上游合流
 
-- **只读 REST 扩展**（纯新增端点，不修改上游行为）
-  - `GET /usage`：按节点聚合的流量统计（当前活跃连接），伴随全局 `upTotal/downTotal`
-  - `GET /delay/latest`：全部节点最近一次延迟测试的快照（读取缓存，不触发测速）
-- **错误日志可读化**
-  - hysteria2 握手/建连失败按原因分类提示：TLS 握手（证书/ALPN/skip-cert-verify）、认证（password）、obfs（salamander 参数不匹配）、超时（服务器不可达或参数不匹配导致静默断开）
-  - UDP 会话建立失败明确提示"服务器可能禁用了 UDP"
-- **默认配置调优**（内部兜底默认值，不改任何配置字段）
-  - hysteria2 默认 `hop-interval` 由上游 30s 调优为 120s，减少端口切换与延迟抖动
-  - 未配置 QUIC 流控窗口时注入推荐值（stream 8MB / connection 16MB），提升大带宽下行吞吐
-  - DNS 缓存默认容量由 4096 调优为 8192
+## 定制内容
 
-> 这些定制点不影响上游配置格式与 API 兼容性，仅作为 Teyvat-Arkhon 应用侧排障与性能体验优化的一环。
+### 1. 只读 REST 扩展
 
-## 特性
+纯新增端点，不修改上游行为：
 
-- 本地 HTTP/HTTPS/SOCKS 服务，支持认证
-- 支持 VMess、VLESS、Shadowsocks、Trojan、Snell、TUIC、Hysteria 等协议
-- 内置 DNS 服务器，旨在最大限度降低 DNS 污染攻击影响，支持 DoH/DoT 上游与 Fake IP
-- 基于域名、GEOIP、IPCIDR 或进程的规则，将报文转发到不同节点
-- 远程分组允许用户实现更强大的规则，支持基于延迟的自动回退、负载均衡或自动选优
-- 远程 Provider 允许用户远程获取节点列表，而无需在配置中硬编码
-- Netfilter TCP 重定向：配合 `iptables` 将 mihomo 部署为上网网关
-- 完整的 HTTP RESTful API 控制器
+| 端点 | 说明 |
+| --- | --- |
+| `GET /usage` | 按节点聚合的流量统计（当前活跃连接），伴随全局 `upTotal` / `downTotal` |
+| `GET /delay/latest` | 全部节点最近一次延迟测试快照（读取缓存，不触发测速） |
 
-## 面板
+### 2. 错误日志可读化
 
-本项目支持的一等公民 Web 面板参见 [metacubexd](https://github.com/MetaCubeX/metacubexd)。
+hysteria2 握手 / 建连失败按原因分类提示：
 
-## 配置示例
+- **TLS 握手失败**：证书校验 / ALPN 不匹配 / 证书过期，并提示可尝试 `skip-cert-verify`
+- **认证失败**：提示检查 hysteria2 `password`
+- **obfs 不匹配**：提示 `obfs` / `obfs-password` 须与服务器一致
+- **超时**：提示服务器不可达，或 TLS/obfs 参数不匹配导致握手被静默断开
 
-配置示例见 [/docs/config.yaml](https://github.com/MetaCubeX/mihomo/blob/Alpha/docs/config.yaml)。
+另：UDP 会话建立失败会明确提示"服务器可能禁用了 UDP"。
 
-## 文档
+### 3. 默认配置调优
 
-使用文档见 [mihomo Docs](https://wiki.metacubex.one/)。
+内部兜底默认值，不改任何配置字段：
 
-## 开发
+- hysteria2 默认 `hop-interval`：30s → **120s**（减少端口切换与延迟抖动）
+- 未配置 QUIC 流控窗口时注入推荐值：stream **8MB** / connection **16MB**（提升大带宽下行吞吐）
+- DNS 缓存默认容量：4096 → **8192**
 
-依赖：
-[Go 1.20 及以上](https://go.dev/dl/)
+## 构建
 
-构建 mihomo：
+依赖：[Go 1.20 及以上](https://go.dev/dl/)
 
 ```shell
-git clone https://github.com/MetaCubeX/mihomo.git
-cd mihomo && go mod download
+git clone https://github.com/luoqingciya/mihomo-teyvat.git
+cd mihomo-teyvat && go mod download
 go build
-```
-
-如果无法直连 GitHub，可设置 Go 代理：
-
-```shell
-go env -w GOPROXY=https://goproxy.io,direct
 ```
 
 使用 gvisor tun 栈构建：
@@ -83,34 +56,29 @@ go env -w GOPROXY=https://goproxy.io,direct
 go build -tags with_gvisor
 ```
 
-### IPTABLES 配置
+无法直连 GitHub 时设置 Go 代理：
 
-适用于支持 `iptables` 的 Linux 系统
-
-```yaml
-# 启用 TPROXY 监听器
-tproxy-port: 9898
-
-iptables:
-  enable: true # 默认 false
-  inbound-interface: eth0 # 检测入站接口，默认为 'lo'
+```shell
+go env -w GOPROXY=https://goproxy.io,direct
 ```
 
-## 调试
+## 发布
 
-调试 API 的使用说明参见 [wiki](https://wiki.metacubex.one/api/#debug)。
+推送 `v*` 形 tag 即触发 [.github/workflows/release-custom.yml](.github/workflows/release-custom.yml)，自动交叉编译并发布 GitHub Release：
+
+- 平台/架构：windows / linux / darwin × amd64 / arm64
+- 资产命名遵循 Teyvat-Arkhon 应用下载脚本约定（windows 为 `.zip` 内含 `mihomo-windows-<arch>.exe`，其余为 `.gz`）
+- release 附带 `checksums.txt`，应用侧据此做完整性校验
+
+## 文档
+
+上游配置与 API 文档：[mihomo Docs](https://wiki.metacubex.one/)
 
 ## 致谢
 
-- [Dreamacro/clash](https://github.com/Dreamacro/clash)
-- [SagerNet/sing-box](https://github.com/SagerNet/sing-box)
-- [riobard/go-shadowsocks2](https://github.com/riobard/go-shadowsocks2)
-- [v2ray/v2ray-core](https://github.com/v2ray/v2ray-core)
-- [WireGuard/wireguard-go](https://github.com/WireGuard/wireguard-go)
-- [yaling888/clash-plus-pro](https://github.com/yaling888/clash)
+- 上游内核 [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)
+- 及其依赖的 [Dreamacro/clash](https://github.com/Dreamacro/clash)、[SagerNet/sing-box](https://github.com/SagerNet/sing-box) 等开源项目
 
 ## 许可
 
-本项目以 GPL-3.0 许可协议发布。
-
-**此外，任何与 `MetaCubeX` 无关的下游项目，其名称不得包含 `mihomo` 字样。**
+[GPL-3.0](LICENSE)。**任何与 `MetaCubeX` 无关的下游项目，其名称不得包含 `mihomo` 字样。**
