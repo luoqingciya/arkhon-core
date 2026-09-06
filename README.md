@@ -20,10 +20,10 @@
 
 ## 定制说明（第一梯队）
 
-本仓库是 [Teyvat-Arkhon](https://github.com/luoqingciya/Teyvat-Arkhon) 的定制内核，基于上游 MetaCubeX/mihomo。在不破坏上游 API 的前提下，做了以下增量定制（均在 `feat/custom-kernel` → `main` 分支）：
+本仓库是 [Teyvat-Arkhon](https://github.com/luoqingciya/Teyvat-Arkhon) 的定制内核，基于上游 MetaCubeX/mihomo。在不破坏上游配置格式与 API 兼容性的前提下，做了以下增量定制（均在 `feat/custom-kernel` → `main` 分支）：
 
 - **只读 REST 扩展**（纯新增端点，不修改上游行为）
-  - `GET /usage`：按节点聚合的流量统计（当前活跃连接），随全局 `upTotal/downTotal`
+  - `GET /usage`：按节点聚合的流量统计（当前活跃连接），伴随全局 `upTotal/downTotal`
   - `GET /delay/latest`：全部节点最近一次延迟测试的快照（读取缓存，不触发测速）
 - **错误日志可读化**
   - hysteria2 握手/建连失败按原因分类提示：TLS 握手（证书/ALPN/skip-cert-verify）、认证（password）、obfs（salamander 参数不匹配）、超时（服务器不可达或参数不匹配导致静默断开）
@@ -35,36 +35,35 @@
 
 > 这些定制点不影响上游配置格式与 API 兼容性，仅作为 Teyvat-Arkhon 应用侧排障与性能体验优化的一环。
 
-## Features
+## 特性
 
-- Local HTTP/HTTPS/SOCKS server with authentication support
-- VMess, VLESS, Shadowsocks, Trojan, Snell, TUIC, Hysteria protocol support
-- Built-in DNS server that aims to minimize DNS pollution attack impact, supports DoH/DoT upstream and fake IP.
-- Rules based off domains, GEOIP, IPCIDR or Process to forward packets to different nodes
-- Remote groups allow users to implement powerful rules. Supports automatic fallback, load balancing or auto select node
-  based off latency
-- Remote providers, allowing users to get node lists remotely instead of hard-coding in config
-- Netfilter TCP redirecting. Deploy Mihomo on your Internet gateway with `iptables`.
-- Comprehensive HTTP RESTful API controller
+- 本地 HTTP/HTTPS/SOCKS 服务，支持认证
+- 支持 VMess、VLESS、Shadowsocks、Trojan、Snell、TUIC、Hysteria 等协议
+- 内置 DNS 服务器，旨在最大限度降低 DNS 污染攻击影响，支持 DoH/DoT 上游与 Fake IP
+- 基于域名、GEOIP、IPCIDR 或进程的规则，将报文转发到不同节点
+- 远程分组允许用户实现更强大的规则，支持基于延迟的自动回退、负载均衡或自动选优
+- 远程 Provider 允许用户远程获取节点列表，而无需在配置中硬编码
+- Netfilter TCP 重定向：配合 `iptables` 将 mihomo 部署为上网网关
+- 完整的 HTTP RESTful API 控制器
 
-## Dashboard
+## 面板
 
-A web dashboard with first-class support for this project has been created; it can be checked out at [metacubexd](https://github.com/MetaCubeX/metacubexd).
+本项目支持的一等公民 Web 面板参见 [metacubexd](https://github.com/MetaCubeX/metacubexd)。
 
-## Configration example
+## 配置示例
 
-Configuration example is located at [/docs/config.yaml](https://github.com/MetaCubeX/mihomo/blob/Alpha/docs/config.yaml).
+配置示例见 [/docs/config.yaml](https://github.com/MetaCubeX/mihomo/blob/Alpha/docs/config.yaml)。
 
-## Docs
+## 文档
 
-Documentation can be found in [mihomo Docs](https://wiki.metacubex.one/).
+使用文档见 [mihomo Docs](https://wiki.metacubex.one/)。
 
-## For development
+## 开发
 
-Requirements:
-[Go 1.20 or newer](https://go.dev/dl/)
+依赖：
+[Go 1.20 及以上](https://go.dev/dl/)
 
-Build mihomo:
+构建 mihomo：
 
 ```shell
 git clone https://github.com/MetaCubeX/mihomo.git
@@ -72,37 +71,36 @@ cd mihomo && go mod download
 go build
 ```
 
-Set go proxy if a connection to GitHub is not possible:
+如果无法直连 GitHub，可设置 Go 代理：
 
 ```shell
 go env -w GOPROXY=https://goproxy.io,direct
 ```
 
-Build with gvisor tun stack:
+使用 gvisor tun 栈构建：
 
 ```shell
 go build -tags with_gvisor
 ```
 
-### IPTABLES configuration
+### IPTABLES 配置
 
-Work on Linux OS which supported `iptables`
+适用于支持 `iptables` 的 Linux 系统
 
 ```yaml
-# Enable the TPROXY listener
+# 启用 TPROXY 监听器
 tproxy-port: 9898
 
 iptables:
-  enable: true # default is false
-  inbound-interface: eth0 # detect the inbound interface, default is 'lo'
+  enable: true # 默认 false
+  inbound-interface: eth0 # 检测入站接口，默认为 'lo'
 ```
 
-## Debugging
+## 调试
 
-Check [wiki](https://wiki.metacubex.one/api/#debug) to get an instruction on using debug
-API.
+调试 API 的使用说明参见 [wiki](https://wiki.metacubex.one/api/#debug)。
 
-## Credits
+## 致谢
 
 - [Dreamacro/clash](https://github.com/Dreamacro/clash)
 - [SagerNet/sing-box](https://github.com/SagerNet/sing-box)
@@ -111,8 +109,8 @@ API.
 - [WireGuard/wireguard-go](https://github.com/WireGuard/wireguard-go)
 - [yaling888/clash-plus-pro](https://github.com/yaling888/clash)
 
-## License
+## 许可
 
-This software is released under the GPL-3.0 license.
+本项目以 GPL-3.0 许可协议发布。
 
-**In addition, any downstream projects not affiliated with `MetaCubeX` shall not contain the word `mihomo` in their names.**
+**此外，任何与 `MetaCubeX` 无关的下游项目，其名称不得包含 `mihomo` 字样。**
