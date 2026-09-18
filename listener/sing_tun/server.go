@@ -500,16 +500,25 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
 	}
 	l.tunIf = tunIf
 
-	tunStack, err := tun.NewStack(strings.ToLower(options.Stack.String()), stackOptions)
-	if err != nil {
-		return
+	requestedStack := strings.ToLower(options.Stack.String())
+	attachedStack := requestedStack
+	tunStack, err := startTunStack(requestedStack, stackOptions)
+	if err != nil && (requestedStack == "gvisor" || requestedStack == "mixed") {
+		// 用户显式选择 gvisor/mixed，但初始化（含 Start 阶段 gvisor 分支）失败时，
+		// 回退到 system 栈重试，避免隧道 fd 无法消费系统包导致网络黑洞直接失败退出。
+		attachedStack = "system"
+		log.Warnln("[TUN] stack=%s goos=%s init failed (%s), degraded to system stack", options.Stack, runtime.GOOS, err)
+		tunStack, err = startTunStack("system", stackOptions)
+		if err != nil {
+			log.Errorln("[TUN] system stack init also failed (%s)", err)
+		}
 	}
-
-	err = tunStack.Start()
 	if err != nil {
 		return
 	}
 	l.tunStack = tunStack
+	// TUN attach 结构化观测日志：所选栈、操作系统、隧道 fd 探测结果。
+	log.Warnln("[TUN] attach stack=%s goos=%s fd=%d fd_socket=%s", attachedStack, runtime.GOOS, options.FileDescriptor, probeFdSocketType(options.FileDescriptor))
 
 	if l.autoRedirect != nil {
 		if len(l.options.RouteAddressSet) > 0 && len(l.routeAddressSet) == 0 {
@@ -691,4 +700,19 @@ func (l *Listener) Config() LC.Tun {
 
 func (l *Listener) Address() string {
 	return l.addrStr
+}
+
+// startTunStack creates and starts a tun stack. If Start() fails, any
+// partially-started stack is closed so callers can safely retry with another
+// stack name without leaking listeners.
+func startTunStack(stackName string, options tun.StackOptions) (tun.Stack, error) {
+	st, err := tun.NewStack(stackName, options)
+	if err != nil {
+		return nil, err
+	}
+	if err := st.Start(); err != nil {
+		st.Close()
+		return nil, err
+	}
+	return st, nil
 }

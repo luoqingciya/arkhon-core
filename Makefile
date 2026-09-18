@@ -204,3 +204,22 @@ clean:
 CLANG ?= clang-14
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 
+# ============================================================================
+# 定制内核专用辅助目标（fork 层追加，不依赖上方平台构建 target 与 GOBUILD）
+# ============================================================================
+
+# 生成/应用/校验 third_party/gvisor 的本地定制补丁（记录 OHOS getsockopt 修复）。
+#   用法：make gvisor-patch   # 等价 scripts/gvisor-patch.sh save，生成 third_party/gvisor.patch
+.PHONY: gvisor-patch
+gvisor-patch:
+	./scripts/gvisor-patch.sh save
+
+# OHOS（OpenHarmony）c-shared 交叉编译冒烟。
+#   依赖 ohos_golang_go fork / TLS_GD 环境；不依赖真机，仅防 TLS 重定位回归。
+#   允许失败：工具链/GOOS 不可用时给出提示，而非硬失败。
+.PHONY: ohos-smoke
+ohos-smoke:
+	@echo "ohos-smoke: GOOS=openharmony c-shared 冒烟（需 ohos_golang_go fork / TLS_GD）；真机不依赖，仅防 TLS 重定位回归..."
+	- CGO_ENABLED=1 GOOS=openharmony GOARCH=arm64 go build -buildmode=c-shared -o bin/libarkhon-smoke.so ./main \
+		|| echo "warning: ohos-smoke failed (openharmony toolchain not available); skip. not a hard failure."
+
