@@ -1,14 +1,12 @@
 # arkhon-core
 
-**Teyvat-Arkhon 定制内核**，基于 [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) 的 fork。
-
-仅做"不改上游配置与 API 兼容性"的增量定制，作为 [Teyvat-Arkhon](https://github.com/luoqingciya/Teyvat-Arkhon) 桌面客户端的代理内核使用。
+**Teyvat-Arkhon 独立代理内核**：在 Clash / Mihomo 配置与 REST API 事实标准之上独立开发维护，作为 [Teyvat-Arkhon](https://github.com/luoqingciya/Teyvat-Arkhon) 桌面客户端的代理内核使用。
 
 ## 策略
 
-- 保持与上游 mihomo 同步，配置格式与 REST API 完全兼容
-- 定制点聚焦：**可排障性**与**默认开箱体验**，不改变协议语义
-- 所有定制均有明确出处标注，便于随上游合流
+- 配置格式与 REST API 保持对 Clash/Mihomo 标准的**向后兼容**（协议语义不变，用户配置可直接复用）
+- 定制方向聚焦：**可排障性**、**默认开箱体验**与**平台适配**（OHOS/OpenHarmony 等），不改变协议语义
+- 代码中保留与上游分叉的标注，便于独立演进与按需合流
 
 ## 定制内容
 
@@ -79,12 +77,11 @@ go env -w GOPROXY=https://goproxy.io,direct
 
 ## 文档
 
-上游配置与 API 文档：[mihomo Docs](https://wiki.metacubex.one/)
+配置与 API 遵循 Clash / Mihomo 公开标准；标准参考：[mihomo Wiki](https://wiki.metacubex.one/)。
 
-## 致谢
+## 起源
 
-- 上游内核 [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)
-- 及其依赖的 [Dreamacro/clash](https://github.com/Dreamacro/clash)、[SagerNet/sing-box](https://github.com/SagerNet/sing-box) 等开源项目
+本项目自 [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) 分叉演进（GPL-3.0），现已作为独立内核维护，不再以上游为依赖。
 
 ## 许可
 
