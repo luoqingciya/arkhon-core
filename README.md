@@ -74,6 +74,7 @@ go env -w GOPROXY=https://goproxy.io,direct
 - 平台/架构：windows / linux / darwin × amd64 / arm64
 - 资产命名遵循 Teyvat-Arkhon 应用下载脚本约定（windows 为 `.zip` 内含 `arkhon-windows-<arch>.exe`，其余为 `.gz`）
 - release 附带 `checksums.txt`，应用侧据此做完整性校验
+- **OpenHarmony/OHOS c-shared（软失败）**：`ohos` job 从 `ohos_golang_go` fork 就地自举工具链，交叉编译 `clashlib/`（c-shared 导出层 `arkhon_core_version/start/stop/attach`）产出 `arkhon-ohos-arm64-<tag>.so`，供鸿蒙端子项目 [Arkhon](https://github.com/luoqingciya/arkhon) 的 NAPI `dlopen("libclash.so")` 使用。该 job 为 `continue-on-error` 软失败：OHOS SDK 原生工具链默认内置 `cidownload.openharmony.cn` 的 `ohos-sdk-full_ohos`（约 3GB，可用仓库变量 `OHOS_NDK_URL` / `OHOS_NDK_NATIVE_ZIP` 覆盖），但已用 `actions/cache` 缓存解压后的 `native/` 目录——**仅首次下载整包，后续 release 直接命中缓存零下载**（换 SDK 版本时 bump `NDK_CACHE_KEY` 即可重拉）。工具链自举失败、NDK 下载/解压失败时仅跳过 `.so`，不影响桌面三平台资产发布。
 
 ## 文档
 

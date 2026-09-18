@@ -82,10 +82,174 @@ jobs:
             arkhon-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}.gz
           if-no-files-found: error
 
+  # OpenHarmony/OHOS 内核共享库（c-shared，供鸿蒙侧 NAPI dlopen）。当前为「软失败」脚手架阶段：
+  #   - 从 ohos_golang_go fork（GOOS=openharmony + TLS_GD，解决 initial-exec TLS 重定位）就地自举 Go 工具链
+  #   - 尝试 -buildmode=c-shared 产出 .so（Gate-B 已在 Mate 80 Pro 真机验证链接路）
+  # cgo 需 OHOS SDK 的 clang 交叉工具链 + sysroot，尚未与鸿蒙侧确认整合方式，故 continue-on-error 软失败，
+  # 不影响桌面三平台资产发布；待鸿蒙侧确认后通过仓库变量 OHOS_CC/OHOS_CXX/OHOS_CFLAGS/OHOS_LDFLAGS 注入并硬化。
+  ohos:
+    name: build openharmony-arm64 (soft-fail)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      # gitcode.com 为 AtomGit，GH runner 直连可能受限；工具链地址/分支可用仓库变量覆盖
+      OHOS_GO_FORK: ${{ vars.OHOS_GO_FORK || 'https://gitcode.com/openharmony-sig/ohos_golang_go.git' }}
+      OHOS_GO_BRANCH: ${{ vars.OHOS_GO_BRANCH || 'release-branch.go1.24' }}
+      # OHOS SDK native 工具链（Linux 版 clang + aarch64-linux-ohos sysroot）。
+      # 默认内置 openharmony daily build 的 ohos-sdk-full_ohos（约 3GB，含 native-linux-x64-6.0.0.46-Beta1.zip；
+      # 已实测 HTTP 200）。用仓库变量 OHOS_NDK_URL / OHOS_NDK_NATIVE_ZIP 可覆盖为更轻量的 public SDK 或固定归档：
+      #   OHOS_NDK_URL        —— 完整 ohos-sdk tar.gz（解压后取 ohos-sdk/linux/native-linux-x64-<ver>-*.zip）
+      #   OHOS_NDK_NATIVE_ZIP —— 直接给出 native-linux-x64-*.zip 直链（比 3GB 整包小得多，推荐日后替换）
+      OHOS_NDK_URL: ${{ vars.OHOS_NDK_URL || 'https://cidownload.openharmony.cn/version/Master_Version/ohos-sdk-full_ohos/20250819_020817/version-Master_Version-ohos-sdk-full_ohos-20250819_020817-ohos-sdk-full_ohos.tar.gz' }}
+      OHOS_NDK_NATIVE_ZIP: ${{ vars.OHOS_NDK_NATIVE_ZIP || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # 自举 ohos_golang_go（go1.24 需 go1.22 自举）
+      - name: Set up Go (bootstrap)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: go.sum
+
+      - name: Bootstrap ohos toolchain
+        run: |
+          set -uo pipefail
+          rm -f /tmp/ohos-go.ready
+          if git clone --depth 1 -b "${OHOS_GO_BRANCH}" "${OHOS_GO_FORK}" /opt/ohos-go 2>/dev/null &&
+             (cd /opt/ohos-go/src && GOROOT_BOOTSTRAP="$(go env GOROOT)" ./make.bash >/dev/null 2>&1); then
+            /opt/ohos-go/bin/go version
+            touch /tmp/ohos-go.ready
+          else
+            echo "::warning::ohos_golang_go 工具链自举失败（fork 不可达？）；.so 构建将跳过（软失败）"
+          fi
+
+      # native 工具链（解压后的 native/ 目录）跨 run 缓存：首次下载 3GB 整包解压并缓存，
+      # 后续 release 直接命中缓存零下载。更换 OHOS_NDK_URL / OHOS_NDK_NATIVE_ZIP 时 bump NDK_CACHE_KEY。
+      - name: Restore OHOS NDK cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /opt/ohos-ndk/native
+          key: ohos-native-ubuntu-20250819
+          fail-on-cache-hit: false
+
+      - name: Setup OHOS NDK (soft-fail)
+        run: |
+          set -uo pipefail
+          rm -f /tmp/ohos-ndk.ready
+          NDK_ROOT=/opt/ohos-ndk
+          mkdir -p "$NDK_ROOT/native"
+          export OHOS_NATIVE="$(dirname "$(dirname "$(dirname "$(find "$NDK_ROOT/native" -path '*/llvm/bin/clang' -type f 2>/dev/null | head -n1)")")")"
+          if [ -n "$OHOS_NATIVE" ] && [ -f "${OHOS_NATIVE}/llvm/bin/clang" ]; then
+            echo "cache hit: 复用已解压 native（${OHOS_NATIVE}）"
+            echo "OHOS_NATIVE=$OHOS_NATIVE" >> "$GITHUB_ENV"
+            echo "::notice::OHOS native 就绪（缓存）：${OHOS_NATIVE}"
+            touch /tmp/ohos-ndk.ready
+            exit 0
+          fi
+          NATIVE_ZIP=""
+          if [ -n "$OHOS_NDK_NATIVE_ZIP" ]; then
+            NATIVE_ZIP="$OHOS_NDK_NATIVE_ZIP"
+            (cd /tmp && curl -fsSLo native.zip "$OHOS_NDK_NATIVE_ZIP") || { echo "::warning::native zip 下载失败；跳过（软失败）"; exit 0; }
+            NATIVE_ZIP=/tmp/native.zip
+          elif [ -n "$OHOS_NDK_URL" ]; then
+            echo "首次：下载并解压 ohos-sdk（约 3GB）..."
+            if ! curl -fsSL "$OHOS_NDK_URL" -o /tmp/ohos-sdk.tar.gz; then
+              echo "::warning::SDK 下载失败（OHOS_NDK_URL 不可达？）；跳过（软失败）"; exit 0
+            fi
+            tar -xzf /tmp/ohos-sdk.tar.gz -C /tmp
+            NATIVE_ZIP="$(find /tmp/ohos-sdk -maxdepth 3 -name 'native-linux-x64-*.zip' 2>/dev/null | head -n1)"
+            if [ -z "$NATIVE_ZIP" ]; then
+              echo "::warning::SDK 内未找到 native-linux-x64-*.zip；跳过（软失败）"; exit 0
+            fi
+          else
+            echo "::warning::未配置 OHOS_NDK_URL / OHOS_NDK_NATIVE_ZIP；跳过 NDK（软失败）。配置方法见 ohos job 注释。"
+            exit 0
+          fi
+          echo "解压 native 工具链：${NATIVE_ZIP}"
+          unzip -q -o "$NATIVE_ZIP" -d "$NDK_ROOT/native" || { echo "::warning::native 解压失败；跳过（软失败）"; exit 0; }
+          CLANG="$(find "$NDK_ROOT/native" -path '*/llvm/bin/clang' -type f 2>/dev/null | head -n1)"
+          if [ -z "$CLANG" ]; then
+            echo "::warning::native 解压结构异常，未找到 llvm/bin/clang；跳过（软失败）"; exit 0
+          fi
+          NATIVE_DIR="$(dirname "$(dirname "$(dirname "$CLANG")")")"
+          echo "OHOS_NATIVE=$NATIVE_DIR" >> "$GITHUB_ENV"
+          echo "OHOS_NDK_FRESH=true" >> "$GITHUB_ENV"
+          echo "::notice::OHOS native 就绪：${NATIVE_DIR}"
+          touch /tmp/ohos-ndk.ready
+
+      - name: Resolve version
+        run: |
+          if [ -n "${GITHUB_REF_NAME}" ] && [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "BUILDTIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Build c-shared (.so)
+        env:
+          # 仓库变量可直接覆盖交叉编译链参数（优先于自动推导）；留空时按 OHOS_NATIVE 自动推导
+          OHOS_CC: ${{ vars.OHOS_CC || '' }}
+          OHOS_CXX: ${{ vars.OHOS_CXX || '' }}
+          OHOS_CFLAGS: ${{ vars.OHOS_CFLAGS || '' }}
+          OHOS_LDFLAGS: ${{ vars.OHOS_LDFLAGS || '' }}
+        run: |
+          set -uo pipefail
+          if [ ! -f /tmp/ohos-go.ready ]; then
+            echo "::warning::ohos 工具链不可用；跳过 .so 构建（软失败）"
+            exit 0
+          fi
+          if [ ! -f /tmp/ohos-ndk.ready ]; then
+            echo "::warning::OHOS NDK 不可用；跳过 .so 构建（软失败）"
+            exit 0
+          fi
+
+          NATIVE="${OHOS_NATIVE}"
+          SYSROOT="${NATIVE}/sysroot"
+          export CC="${OHOS_CC:-${NATIVE}/llvm/bin/clang --target=aarch64-linux-ohos -D__MUSL__ --sysroot=${SYSROOT}}"
+          export CXX="${OHOS_CXX:-${NATIVE}/llvm/bin/clang++ --target=aarch64-linux-ohos -D__MUSL__ --sysroot=${SYSROOT}}"
+          export AR="${NATIVE}/llvm/bin/llvm-ar"
+          export LD="${NATIVE}/llvm/bin/lld"
+          export CGO_CFLAGS="${OHOS_CFLAGS:---target=aarch64-linux-ohos -D__MUSL__ --sysroot=${SYSROOT}}"
+          export CGO_LDFLAGS="${OHOS_LDFLAGS:---target=aarch64-linux-ohos -fuse-ld=lld}"
+          export GOOS=openharmony GOARCH=arm64 CGO_ENABLED=1
+          export GOTOOLCHAIN=local GOPROXY='https://proxy.golang.org,direct' GOSUMDB=off
+
+          # 命名 arkhon-ohos-arm64-<version>.so（与应用下载脚本 arkhon-* 通配对齐）
+          OUT="${GITHUB_WORKSPACE}/arkhon-ohos-arm64-${VERSION}.so"
+          cd clashlib
+          # 关键：构建 clashlib（真正的 c-shared 导出层），而非根 main.go（CLI 入口，无 //export 符号）。
+          # -a 强制全量重编，规避 build cache 混入旧 tag 产物导致 gvisor stub 分支被编入。
+          if /opt/ohos-go/bin/go build -a -tags with_gvisor -buildmode=c-shared -trimpath \
+                -ldflags "-X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=${BUILDTIME}' -w -s -buildid=" \
+                -o "${OUT}" .; then
+            echo "::notice::已产出 ${OUT}"
+          else
+            echo "::warning::c-shared 构建失败（clang/sysroot 或依赖问题）；.so 跳过（软失败）"
+            exit 0
+          fi
+
+      - name: Save OHOS NDK cache
+        if: ${{ env.OHOS_NDK_FRESH == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: /opt/ohos-ndk/native
+          key: ohos-native-ubuntu-20250819
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: core-ohos-arm64
+          path: arkhon-ohos-arm64-*.so
+          if-no-files-found: ignore
+
   release:
     name: Publish GitHub Release
     if: ${{ github.ref_type == 'tag' }}
-    needs: [build]
+    needs: [build, ohos]
     permissions:
       contents: write
     runs-on: ubuntu-latest

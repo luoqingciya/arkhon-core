@@ -220,6 +220,6 @@ gvisor-patch:
 .PHONY: ohos-smoke
 ohos-smoke:
 	@echo "ohos-smoke: GOOS=openharmony c-shared 冒烟（需 ohos_golang_go fork / TLS_GD）；真机不依赖，仅防 TLS 重定位回归..."
-	- CGO_ENABLED=1 GOOS=openharmony GOARCH=arm64 go build -buildmode=c-shared -o bin/libarkhon-smoke.so ./main \
+	- cd clashlib && CGO_ENABLED=1 GOOS=openharmony GOARCH=arm64 go build -buildmode=c-shared -o ../bin/libclash-smoke.so . \
 		|| echo "warning: ohos-smoke failed (openharmony toolchain not available); skip. not a hard failure."
 
