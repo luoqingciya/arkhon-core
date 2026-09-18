@@ -137,11 +137,26 @@ jobs:
       - name: Setup OHOS NDK (soft-fail)
         run: |
           set -uo pipefail
+          # 定位 native 根目录：clang 在 OHOS 工具链里是符号链接（-> clang-<ver>），
+          # find 不能用 -type f；sysroot 位于 native 根下，向上探测含 sysroot 的目录作为根。
+          find_native_root() {
+            local base="$1" c d d2 d1
+            c="$(find "$base" -path '*/llvm/bin/clang' 2>/dev/null | head -n1)"
+            [ -n "$c" ] || c="$(find "$base" -name 'clang*' 2>/dev/null | head -n1)"
+            [ -n "$c" ] || { echo ""; return; }
+            d="$(dirname "$c")"
+            while [ -n "$d" ] && [ "$d" != "/" ]; do
+              if [ -d "$d/sysroot" ]; then echo "$d"; return; fi
+              d="$(dirname "$d")"
+            done
+            d2="$(dirname "$c")"; d1="$(dirname "$d2")"
+            echo "$(dirname "$d1")"
+          }
           rm -f /tmp/ohos-ndk.ready
           NDK_ROOT=/opt/ohos-ndk
           mkdir -p "$NDK_ROOT/native"
-          export OHOS_NATIVE="$(dirname "$(dirname "$(dirname "$(find "$NDK_ROOT/native" -path '*/llvm/bin/clang' -type f 2>/dev/null | head -n1)")")")"
-          if [ -n "$OHOS_NATIVE" ] && [ -f "${OHOS_NATIVE}/llvm/bin/clang" ]; then
+          export OHOS_NATIVE="$(find_native_root "$NDK_ROOT/native")"
+          if [ -n "$OHOS_NATIVE" ] && [ -e "$OHOS_NATIVE/llvm/bin/clang" ]; then
             echo "cache hit: 复用已解压 native（${OHOS_NATIVE}）"
             echo "OHOS_NATIVE=$OHOS_NATIVE" >> "$GITHUB_ENV"
             echo "::notice::OHOS native 就绪（缓存）：${OHOS_NATIVE}"
@@ -169,11 +184,10 @@ jobs:
           fi
           echo "解压 native 工具链：${NATIVE_ZIP}"
           unzip -q -o "$NATIVE_ZIP" -d "$NDK_ROOT/native" || { echo "::warning::native 解压失败；跳过（软失败）"; exit 0; }
-          CLANG="$(find "$NDK_ROOT/native" -path '*/llvm/bin/clang' -type f 2>/dev/null | head -n1)"
-          if [ -z "$CLANG" ]; then
-            echo "::warning::native 解压结构异常，未找到 llvm/bin/clang；跳过（软失败）"; exit 0
+          NATIVE_DIR="$(find_native_root "$NDK_ROOT/native")"
+          if [ -z "$NATIVE_DIR" ] || [ ! -e "$NATIVE_DIR/llvm/bin/clang" ]; then
+            echo "::warning::native 解压结构异常，未定位到含 sysroot 的 native 根；跳过（软失败）"; exit 0
           fi
-          NATIVE_DIR="$(dirname "$(dirname "$(dirname "$CLANG")")")"
           echo "OHOS_NATIVE=$NATIVE_DIR" >> "$GITHUB_ENV"
           echo "OHOS_NDK_FRESH=true" >> "$GITHUB_ENV"
           echo "::notice::OHOS native 就绪：${NATIVE_DIR}"
