@@ -67,6 +67,15 @@ go env -w GOPROXY=https://goproxy.io,direct
 - **调试开关**：设置环境变量 `TEYVAT_ARKHON_PPROF=127.0.0.1:6060` 可启用 `net/http/pprof`，断流定位无需重新构建。
 - **内存优化**：配置顶层加 `geodata-mode: memconservative` 可懒加载 geo 数据；规则集支持 `.mrs` 二进制（`behavior: mrs`）。
 
+## 分支
+
+本仓库（远端 `arkhon-core`）长期维护两个分支，二者当前已快进对齐到同一提交：
+
+- **`main`**：稳定主干。发布 `v*` tag 一律从 `main` 打出；保持可构建、可通过 CI、可发布。
+- **`feat/custom-kernel`**：定制开发线。所有 Teyvat 定制特性在此开发、验证（`go build` / `go vet` 通过后再合入），稳定后以**快进（fast-forward）**方式同步回 `main`，使 `main` 不产生 merge 分叉、历史保持线性。
+
+> 日常流程：`feat/custom-kernel` 上开发 → `git push origin feat/custom-kernel` → 验证通过后 `git push origin feat/custom-kernel:main` 快进回主干，再打 tag 触发 release。
+
 ## 发布
 
 推送 `v*` 形 tag 即触发 [.github/workflows/release-custom.yml](.github/workflows/release-custom.yml)，自动交叉编译并发布 GitHub Release：
