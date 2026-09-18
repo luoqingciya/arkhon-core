@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -97,6 +99,17 @@ func main() {
 	}
 
 	_, _ = maxprocs.Set(maxprocs.Logger(func(string, ...any) {}))
+
+	// TEYVAT_ARKHON_PPROF: optional pprof debugging endpoint, e.g. 127.0.0.1:6060.
+	// Non-blocking; failure only logs, never aborts startup.
+	if pprofAddr := os.Getenv("TEYVAT_ARKHON_PPROF"); pprofAddr != "" {
+		go func() {
+			log.Infoln("TEYVAT_ARKHON_PPROF: starting pprof server at %s", pprofAddr)
+			if err := http.ListenAndServe(pprofAddr, nil); err != nil {
+				log.Errorln("TEYVAT_ARKHON_PPROF: pprof server error: %s", err)
+			}
+		}()
+	}
 
 	if len(os.Args) > 1 && os.Args[1] == "convert-ruleset" {
 		provider.ConvertMain(os.Args[2:])

@@ -133,6 +133,12 @@ profile: # 存储 select 选择记录
 # Tun 配置
 tun:
   enable: false
+  # TUN 栈选型（stack）：
+  #   - system : 使用系统网络栈，兼容性最好，为默认值
+  #   - gvisor : 用户态协议栈，性能/灵活性更优（需 with_gvisor 编译开关）
+  #   - mixed  : 同时启用 system 与 gvisor，按情景混用
+  #   自动降级行为：当选择 gvisor（或 mixed 中 gvisor 部分）初始化失败时，
+  #   mihomo 会自动降级为 system，避免造成断网。
   stack: system # gvisor/mixed
   dns-hijack:
     - 0.0.0.0:53 # 需要劫持的 DNS
@@ -243,6 +249,13 @@ tunnels: # one line config
     address: 127.0.0.1:7777
     target: target.com
     proxy: proxy
+
+# ============================================================================
+# [全局] geodata-mode: memconservative
+#   顶层可加：geodata-mode: memconservative
+#   以懒加载（lazy load）方式加载 geo 数据（geoip/geosite），只在用到时才加载
+#   对应数据库，可显著降低内存占用；代价是按需加载时首次查询略慢。
+# ============================================================================
 
 # DNS 配置
 dns:
@@ -1935,6 +1948,19 @@ rule-providers:
       - '*.*.microsoft.com'
       - 'books.itunes.apple.com'
 
+# ============================================================================
+# [rules] RULE-SET 支持二进制的 mrs 规则集
+#   RULE-SET 除常规文本规则集（.yaml/.json，默认 behavior: classical）外，
+#   还支持 metacubex 二进制 .mrs 格式，其 provider 需声明 behavior: mrs。
+#   示例：
+#     rule-providers:
+#       mymrs:
+#         type: file
+#         behavior: mrs            # 二进制规则集
+#         path: ./ruleset/dns.mrs
+#         format: binary
+#   搭配 RULE-SET,<name>,<target> 使用，加载更快、体积更小。
+# ============================================================================
 rules:
   - RULE-SET,rule1,REJECT
   - IP-ASN,1,PROXY
