@@ -62,6 +62,13 @@ go build -o arkhon -tags with_gvisor
 go env -w GOPROXY=https://goproxy.io,direct
 ```
 
+## Teyvat 定制特性
+
+- **OHOS/OpenHarmony 适配**：TUN 隧道 fd 探测改用 `getsockopt(SO_TYPE)`（沙箱限制 `fstat` 的 `EPERM`），gvisor 补丁固化于 `third_party/gvisor`，可用 `scripts/gvisor-patch.sh save/apply/verify` 维护，升级上游时检测冲突。
+- **TUN 自愈与可观测**：启动打印结构化日志 `[TUN] attach stack/goos/fd/fd_socket`；`gvisor`/`mixed` 栈初始化失败自动降级 `system` 栈并告警，避免网络黑洞。
+- **调试开关**：设置环境变量 `TEYVAT_ARKHON_PPROF=127.0.0.1:6060` 可启用 `net/http/pprof`，断流定位无需重新构建。
+- **内存优化**：配置顶层加 `geodata-mode: memconservative` 可懒加载 geo 数据；规则集支持 `.mrs` 二进制（`behavior: mrs`）。
+
 ## 发布
 
 推送 `v*` 形 tag 即触发 [.github/workflows/release-custom.yml](.github/workflows/release-custom.yml)，自动交叉编译并发布 GitHub Release：
