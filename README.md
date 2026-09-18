@@ -40,7 +40,7 @@ hysteria2 握手 / 建连失败按原因分类提示：
 
 ## 构建
 
-依赖：[Go 1.20 及以上](https://go.dev/dl/)
+依赖：[Go 1.20 及以上](https://go.dev/dl/)（内核主程序）；`clashlib/`（OHOS c-shared 导出层）需 Go 1.24，OHOS 交叉编译使用 OpenHarmony SIG 官方 Go fork [ohos_golang_go](https://gitcode.com/openharmony-sig/ohos_golang_go)（`GOOS=openharmony`，内置 general dynamic TLS 支持，解决 musl `initial-exec TLS` 导致 `.so` 无法 `dlopen`）。
 
 ```shell
 git clone https://github.com/luoqingciya/arkhon-core.git
