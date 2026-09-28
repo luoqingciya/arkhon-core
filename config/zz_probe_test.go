@@ -6,7 +6,7 @@ import (
 
 func TestProbeParseJSON(t *testing.T) {
 	cfgJSON := []byte(`{"mode":"rule","log-level":"debug","bind-address":"127.0.0.1","mixed-port":1031,"dns":{"enable":false},
-"proxies":[{"name":"test-node","type":"hysteria2","server":"example.com","port":29862,"password":"REDACTED","alpn":["h3"],"client-fingerprint":"chrome"}],
+"proxies":[{"name":"test-node","type":"hysteria2","server":"example.com","port":443,"password":"REDACTED","alpn":["h3"],"client-fingerprint":"chrome"}],
 "proxy-groups":[{"name":"PROXY","type":"select","proxies":["test-node","DIRECT"]}],
 "rules":["MATCH,PROXY"]}`)
 	raw, err := UnmarshalRawConfig(cfgJSON)
